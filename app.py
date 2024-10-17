@@ -25,7 +25,7 @@ ALX students who have queries on ALX learning experience.Your responses must be 
 avoiding special characters like new lines, italics, tabs, or block quotes. Be as human as possible.'''
 
 # Load the CSV file and group content by conversation
-csv_file_path = 'C:/Users/user/Documents/Sand Technology/messages_10000.csv'
+csv_file_path = 'messages_10000.csv'
 df = pd.read_csv(csv_file_path)
 grouped_content = df.groupby('conversation_id')['content'].apply(' '.join).reset_index()
 
