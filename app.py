@@ -7,6 +7,8 @@ from langchain_groq import ChatGroq
 import os
 import logging
 from dotenv import load_dotenv
+from langchain.evaluation.criteria import CriteriaEvalChain
+from langchain_openai import OpenAI
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -15,24 +17,53 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 os.environ['GROQ_API_KEY'] = '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'
+os.environ['OPENAI_API_KEY'] = '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'  # Add the OpenAI key
 
 # Initialize the chatbot model
 model = ChatGroq(model_name="llama3-70b-8192", api_key=os.getenv("GROQ_API_KEY"))
 
+# Initialize the evaluation model (for response evaluation)
+eval_model = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 # Define the system message template
 system = '''You are a helpful assistant that answers questions based on provided context. You help 
-ALX students who have queries on ALX learning experience.Your responses must be plain text, 
+ALX students who have queries on ALX learning experience. Your responses must be plain text, 
 avoiding special characters like new lines, italics, tabs, or block quotes. Be as human as possible.'''
 
+# Define evaluation criteria
+criteria = {
+    "accuracy": "Does the response accurately address the user's question?",
+    "truthfulness": "Is the information provided in the response true?",
+    "context awareness": "Is the response aware of the context provided?",
+    "fluency": "Is the response fluent and free of grammatical errors?",
+    "coherence": "Is the response coherent and logically structured?",
+    "naturalness of language": "Does the response use natural, human-like language?"
+}
+
+# Initialize the evaluation chain
+evaluator = CriteriaEvalChain.from_llm(llm=eval_model, criteria=criteria)
+
+# Function to evaluate the chatbot's response
+def evaluate_response(user_input, response, context):
+    """
+    Evaluate the response based on predefined criteria.
+    """
+    try:
+        evaluation = evaluator.evaluate_strings(prediction=response, input=f"{user_input}\n{context}")
+        return evaluation
+    except Exception as e:
+        logger.error(f"Error during evaluation: {e}")
+        return {"error": "An error occurred during evaluation."}
+
 # Load the CSV file and group content by conversation
-csv_file_path = 'messages_10000.csv'
+csv_file_path = 'C:/Users/user/Documents/Sand Technology/messages_10000.csv'
 df = pd.read_csv(csv_file_path)
 grouped_content = df.groupby('conversation_id')['content'].apply(' '.join).reset_index()
 
 # Initialize a dictionary to store conversations
 conversations = {}
 
-# Iterate over the rows in the dataframe to populate the conversations dictionary
+# Populate the conversations dictionary
 for _, row in df.iterrows():
     conversation_id = row['conversation_id']
     content = row['content']
@@ -40,7 +71,6 @@ for _, row in df.iterrows():
     
     if conversation_id not in conversations:
         conversations[conversation_id] = []
-
     conversations[conversation_id].append((ordinality, content))
 
 # Function to fetch and display a conversation by ID
@@ -89,11 +119,11 @@ def llm_answer(user_input):
     try:
         context_results = grouped_content[grouped_content['content'].str.contains(user_input, case=False, na=False)]
         context = context_results['content'].iloc[0] if not context_results.empty else "No relevant context found"
-        return llm_query(user_input=user_input, context=context)
+        return llm_query(user_input=user_input, context=context), context
 
     except Exception as e:
         logger.error(f"Error in retrieving context: {e}")
-        return "An error occurred while retrieving the context. Please try again."
+        return "An error occurred while retrieving the context. Please try again.", ""
 
 # Streamlit UI
 st.title("ALX Conversation Viewer and Chatbot")
@@ -140,10 +170,50 @@ st.header("Chat with the Bot")
 # Input field for user query
 user_query = st.text_input("Ask a question:")
 
+# Initialize variables to hold response and context
+if 'bot_response' not in st.session_state:
+    st.session_state.bot_response = ""
+if 'response_context' not in st.session_state:
+    st.session_state.response_context = ""
+
 # Button to get the response from the chatbot
 if st.button("Send"):
     if user_query:
-        response = llm_answer(user_query)
-        st.write("**Bot**: " + response)
+        st.session_state.bot_response, st.session_state.response_context = llm_answer(user_query)
+        st.write("**Bot**: " + st.session_state.bot_response)
     else:
         st.warning("Please enter a question to ask the bot.")
+
+# Add a flag to check if the response is generated
+response_generated = bool(st.session_state.bot_response)
+
+# Evaluation button (only show if a response has been generated)
+if response_generated:
+    if st.button(f"Evaluate Response for this response"):
+        if st.session_state.bot_response and st.session_state.bot_response != "An error occurred. Please try again.":
+            evaluation = evaluate_response(user_query, st.session_state.bot_response, st.session_state.response_context)
+            
+            # Formatting the evaluation results
+            reasoning = evaluation.get("reasoning", "")
+            value = evaluation.get("value", "")
+            score = evaluation.get("score", 0)
+
+            # Create a structured string for the evaluation results
+            evaluation_summary = f"""
+            
+            **Evaluation Results:**
+
+             {reasoning}
+
+             {value}
+            
+
+            **Score:** {score}
+               
+
+            
+            """
+
+            st.markdown(evaluation_summary)  # Use markdown for better formatting
+        else:
+            st.warning("No valid response to evaluate.")

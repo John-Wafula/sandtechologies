@@ -6,9 +6,11 @@ import os
 import logging
 from dotenv import load_dotenv
 import os
-os.environ['GROQ_API_KEY'] = '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'
+
 # Load environment variables
 load_dotenv()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 logger = logging.getLogger(__name__)
 
 # Initialize the chatbot model
