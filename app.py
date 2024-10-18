@@ -16,9 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-os.environ['GROQ_API_KEY'] = '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'
-os.environ['OPENAI_API_KEY'] = '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'  # Add the OpenAI key
-
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 # Initialize the chatbot model
 model = ChatGroq(model_name="llama3-70b-8192", api_key=os.getenv("GROQ_API_KEY"))
 
